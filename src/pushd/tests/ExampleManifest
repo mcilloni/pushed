@@ -1,0 +1,5 @@
+Pushd-Connector-Name: example
+Pushd-Connector-Version: 2.3
+Pushd-Connector-Class: pushd.tests.ExampleConnector
+Pushd-Connector-Flatten: false
+
