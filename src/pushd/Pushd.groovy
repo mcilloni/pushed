@@ -23,11 +23,10 @@ import groovy.transform.CompileStatic
 import groovy.util.logging.Log
 
 
-@Grab(group='commons-daemon', module='commons-daemon', version='1.0.15')
+@Grab(group='commons-daemon', module='commons-daemon', version='[1.0.15,)')
 import org.apache.commons.daemon.Daemon
 import org.apache.commons.daemon.DaemonContext
 import org.apache.commons.daemon.DaemonInitException
-import pushd.Config.ConfigException
 
 /**
  * Pushd main daemon.
@@ -59,7 +58,7 @@ final class Pushd implements Daemon {
     @Override
     void start() throws Exception {
         //Start all connectors
-        Config.connectors*.init()
+        Config.values.connectors*.init()
         this.mListener = []
         this.mListener.run()
     }

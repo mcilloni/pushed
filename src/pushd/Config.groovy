@@ -20,8 +20,8 @@
 package pushd
 
 import groovy.transform.CompileStatic
+import groovy.transform.PackageScope
 import groovy.util.logging.Log
-import pushd.Connector.Status
 
 /**
  * Parses Pushd configuration, and wraps access to it.
@@ -29,30 +29,45 @@ import pushd.Connector.Status
 @Log
 final class Config {
 
-    private static ConfigObject sConfig
-    private static SocketAddress sSockAddr
-    private static String sRedisHost
+    private static Config sInstance
+
+    @PackageScope static Config read(String path) {
+        sInstance = [path] as Config
+    }
+
+    static Config getValues() {
+        sInstance
+    }
+
+    private final ConfigObject mConfig
+    private final SocketAddress mSockAddr
+    private final String mRedisHost
+    private final Integer mRedisDb
 
     /**
      * Reads a config file in Groovy format, and checks if it is correctly formed (it must have a pushd root and must specify installation dir of pushd.
      * @param path a string containing the path to a config file
      * @throws ConfigException
      */
-    static void read(String path) throws ConfigException {
+    private Config(String path) throws ConfigException {
         try {
+
+            if (mConfig) {
+                throw ["Config already initialized"] as ConfigException
+            }
 
             log.info "Parsing $path with ConfigSlurper..."
 
-            def conf = new ConfigSlurper().parse new File(path).text
+            def conf = ([] as ConfigSlurper).parse(([path] as File).text)
 
             if(!conf.pushd) {
-                throw new ConfigException('no pushd root in config')
+                throw ['no pushd root in config'] as ConfigException
             }
 
             conf = conf.pushd
 
             if(!conf.installPath) {
-                throw new ConfigException('no install path in config')
+                throw ['no install path in config'] as ConfigException
             }
 
             def port = 8955
@@ -61,7 +76,7 @@ final class Config {
                 try {
                     port = conf.port as Integer
                 } catch (Exception ignore) {
-                    throw new ConfigException("${conf.port} is not a valid port number")
+                    throw ["${conf.port} is not a valid port number"] as ConfigException
                 }
             }
 
@@ -71,116 +86,79 @@ final class Config {
                 try {
                     host = conf.host as String
                 } catch (Exception ignore) {
-                    throw new ConfigException("${conf.host} is not a valid hostname")
+                    throw ["${conf.host} is not a valid hostname"] as ConfigException
                 }
             }
 
-            sSockAddr = [host,port] as InetSocketAddress
+            mSockAddr = [host,port] as InetSocketAddress
 
-            sRedisHost = 'localhost'
+            mRedisHost = 'localhost'
 
             if(conf.redisHost) {
                 try {
-                    sRedisHost = conf.redisHost as String
+                    mRedisHost = conf.redisHost as String
                 } catch (Exception ignore) {
-                    throw new ConfigException("${conf.host} is not a valid hostname")
+                    throw ["${conf.redisHost} is not a valid hostname"] as ConfigException
                 }
             }
 
-            sConfig = conf
+            mRedisDb = 0
+
+            if(conf.redisDb) {
+                try {
+                    mRedisDb = conf.redisDb as Integer
+
+                    if (!(mRedisDb in (0..15))) {
+                        throw ["${conf.redisDb} is not in 0-15 range"] as ConfigException
+                    }
+                } catch (Exception ignore) {
+                    throw ["${conf.redisDb} is not a valid integer value"] as ConfigException
+                }
+            }
+
+            mConfig = conf
 
         } catch (Exception e) {
-            throw new ConfigException(e)
+            throw [e] as ConfigException
         }
 
         log.info "No exceptions, $path is a valid pushd config."
 
     }
 
-    static SocketAddress getSocketAddress() {
-        sSockAddr
+    SocketAddress getSocketAddress() {
+        mSockAddr
     }
 
-    static String getRedisHost() {
-        sRedisHost
+    String getRedisHost() {
+        mRedisHost
+    }
+
+    Integer getRedisDb() {
+        mRedisDb
     }
 
     /**
      * Returns a list of the List<Connector> specified by this config, initializing them if needed.
      * @return a list of the List<Connector> specified by this config
      */
-    static List<Connector> getConnectors() {
+    List<Connector> getConnectors() {
         if(!Connector.sConnectors) {
-            loadConnectors()
+            Connector.loadConnectors(mConfig)
         }
         Connector.sConnectors
     }
+}
 
-    private static List<Connector> loadConnectors() throws ConfigException, Connector.ConnectorException {
-        if(!(sConfig.connectorsPath && sConfig.connectors)) {
-            log.warning "no connectors/connectorsPath specified in config. Pushd will load but will be useless until you manually load one from the console. Please check your configuration"
-            return []
-        }
+@CompileStatic
+class ConfigException extends Exception {
 
-        File conDir = [sConfig.connectorsPath as String]
-
-        if(!(conDir.exists() && conDir.directory )) {
-            throw ["connectorsPath unexisting or not directory: ${conDir.name}"] as ConfigException
-        }
-
-        if(!(sConfig.connectors instanceof ConfigObject)) {
-            throw ['connectors is not a config object in current config'] as ConfigException
-        }
-
-        log.info "Now loading specified connectors from ${conDir.absolutePath}"
-
-        sConfig.connectors.each { String key, ConfigObject value ->
-
-            if (!(value.jarname && value.jarname instanceof String)) {
-                throw ["No or invalid jarname provided for $key"] as ConfigException
-            }
-
-            ConfigObject config = value.settings ?: null
-
-            def connector = Connector.load(value.jarname as String, config)
-
-            connector.problemReport = Config.&problemReport
-
-            log.info "Loaded plugin ${connector.name}"
-        }
-
-        connectors
-
+    ConfigException(Exception exc) {
+        super(exc)
     }
 
-    private static void problemReport(Connector connector, String message) {
-        switch (connector.status) {
-            case Status.DEAD:
-                log.severe "Connector ${connector.name} has stopped working with reason $message"
-                connector.destroy()
-                break
-
-            case Status.BUSY:
-                log.warning "Connector ${connector.name} has still not fully initialized: $message"
-                break
-
-            default:
-                log.warning "Connector ${connector.name} is reporting problems but is on status ${connector.status}. This is unsupported"
-        }
-
-    }
-
-    @CompileStatic
-    static class ConfigException extends Exception {
-
-        ConfigException(Exception exc) {
-            super(exc)
-        }
-
-        ConfigException(String msg) {
-            super(msg)
-        }
-
+    ConfigException(String msg) {
+        super(msg)
     }
 
 }

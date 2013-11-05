@@ -40,12 +40,12 @@ abstract class Connector {
     private String mVersion
     private Status mCurrentStatus
 
-    @PackageScope static Set<Connector> sConnectors
+    @PackageScope static ArrayList<Connector> sConnectors
 
     @PackageScope Closure problemReport
 
     static {
-        sConnectors = ([] as Set<Connector>).asSynchronized() //must be syncronized
+        sConnectors = [].asSynchronized() //must be syncronized
     }
 
     static Connector load(String jarPath, ConfigObject connectorConfig) throws ConnectorException,IOException {
@@ -110,6 +110,58 @@ abstract class Connector {
 
     }
 
+    @PackageScope static void loadConnectors(ConfigObject config) throws ConfigException, ConnectorException {
+        if(!(config.connectorsPath && config.connectors)) {
+            log.warning "no connectors/connectorsPath specified in config. Pushd will load but will be useless until you manually load one from the console. Please check your configuration"
+            return
+        }
+
+        File conDir = [config.connectorsPath as String]
+
+        if(!(conDir.exists() && conDir.directory )) {
+            throw ["connectorsPath unexisting or not directory: ${conDir.name}"] as ConfigException
+        }
+
+        if(!(config.connectors instanceof ConfigObject)) {
+            throw ['connectors is not a config object in current config'] as ConfigException
+        }
+
+        log.info "Now loading specified connectors from ${conDir.absolutePath}"
+
+        config.connectors.each { String key, ConfigObject value ->
+
+            if (!(value.jarname && value.jarname instanceof String)) {
+                throw ["No or invalid jarname provided for $key"] as ConfigException
+            }
+
+            ConfigObject connConfig = value.settings ?: null
+
+            def connector = load(value.jarname as String, connConfig)
+
+            connector.problemReport = Connector.&problemReport
+
+            log.info "Loaded plugin ${connector.name}"
+        }
+
+    }
+
+    private static void problemReport(Connector connector, String message) {
+        switch (connector.status) {
+            case Status.DEAD:
+                log.severe "Connector ${connector.name} has stopped working with reason $message"
+                connector.destroy()
+                break
+
+            case Status.BUSY:
+                log.warning "Connector ${connector.name} has still not fully initialized: $message"
+                break
+
+            default:
+                log.warning "Connector ${connector.name} is reporting problems but is on status ${connector.status}. This is unsupported"
+        }
+
+    }
+
     /**
      * This constructor should be overridden equally by each connector, or it will be impossibile for the load method to invoke it.
      * @param name The name of the connector
@@ -157,40 +209,40 @@ abstract class Connector {
         sConnectors -= this
     }
 
-    @CompileStatic
-    static class ConnectorException extends Exception {
+}
 
-        ConnectorException(Exception e) {
-            super(e)
-        }
+@CompileStatic
+class ConnectorException extends Exception {
 
-        ConnectorException(String message) {
-            super(message)
-        }
-
-        ConnectorException(String jarPath, String missingProperty) {
-            super("jar file $jarPath does not specify the $missingProperty field in its manifest")
-        }
-
+    ConnectorException(Exception e) {
+        super(e)
     }
 
-    @CompileStatic
-    static enum Status {
-
-        //The connector is up and running.
-        READY,
-
-        //The connector is still busy initializing itself.
-        BUSY,
-
-        //The connector has stopped working.
-        DEAD,
-
-        //The connector has been suspended.
-        SUSPENDED,
-
-        //The connector has not been initialized yet.
-        OFF
+    ConnectorException(String message) {
+        super(message)
     }
 
+    ConnectorException(String jarPath, String missingProperty) {
+        super("jar file $jarPath does not specify the $missingProperty field in its manifest")
+    }
+
+}
+
+@CompileStatic
+enum Status {
+
+    //The connector is up and running.
+    READY,
+
+    //The connector is still busy initializing itself.
+    BUSY,
+
+    //The connector has stopped working.
+    DEAD,
+
+    //The connector has been suspended.
+    SUSPENDED,
+
+    //The connector has not been initialized yet.
+    OFF
 }

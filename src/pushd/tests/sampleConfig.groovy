@@ -30,6 +30,8 @@ pushd {
 
     //default redis host is localhost
     //redisHost = 'localhost'
+    //default redis db is 0
+    //redisDb = 0
 
     //facultative: pushd will run if no connector is installed, but this will surely get weird.
     connectorsPath = "/home/marco/Workspace/Pushd/out/production/Pushd/"

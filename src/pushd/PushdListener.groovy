@@ -35,15 +35,15 @@ class PushdListener extends Thread {
 
     private ServerSocket mServerSocket
 
-    private ArrayList<PushdConnection> mConnections
+    private List<PushdConnection> mConnections
 
     PushdListener() {
         super()
         this.mServerSocket = []
-        this.mServerSocket.bind Config.socketAddress
+        this.mServerSocket.bind Config.values.socketAddress
         this.mExecute = [true]
         this.mConnections = [].asSynchronized()
-        super.def
+
     }
 
     void terminate() {
@@ -51,11 +51,12 @@ class PushdListener extends Thread {
         this.mServerSocket.close()
     }
 
-    @Override run() {
+    @Override
+    void run() {
         try {
             this.mServerSocket.accept { Socket client ->
                 client.withStreams { InputStream input, OutputStream output ->
-                        this.mConnections << [[[input] as InputStreamReader] as BufferedReader, [[output] as OutputStreamWriter] as BufferedWriter] as PushdConnection
+                        this.mConnections << ([[[input] as InputStreamReader] as BufferedReader, [[output] as OutputStreamWriter] as BufferedWriter] as PushdConnection)
                 }
             }
         } catch (SocketException ignore) {} //usually thrown because of terminate() and close()
