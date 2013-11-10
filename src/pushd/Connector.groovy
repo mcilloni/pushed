@@ -48,6 +48,10 @@ abstract class Connector {
         sConnectors = [].asSynchronized() //must be syncronized
     }
 
+    static Boolean isValidConnectorName(String name) {
+        !(':' in name) && (name in sConnectors.collect { it.name })
+    }
+
     static Connector load(String jarPath, ConfigObject connectorConfig) throws ConnectorException,IOException {
 
         //making this absolute

@@ -31,7 +31,7 @@ final class Config {
 
     private static Config sInstance
 
-    @PackageScope static Config read(String path) {
+    static Config read(String path) {
         sInstance = [path] as Config
     }
 

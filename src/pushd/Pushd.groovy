@@ -23,7 +23,7 @@ import groovy.transform.CompileStatic
 import groovy.util.logging.Log
 
 
-@Grab(group='commons-daemon', module='commons-daemon', version='[1.0.15,)')
+
 import org.apache.commons.daemon.Daemon
 import org.apache.commons.daemon.DaemonContext
 import org.apache.commons.daemon.DaemonInitException
