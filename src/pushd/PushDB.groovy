@@ -54,12 +54,14 @@ final class PushDB {
         this.mConnectionPool = [[] as JedisPoolConfig,redisHost]
         log.info 'Connected at redis.'
 
-        Jedis jedis = this.jedis
+        exec { Jedis jedis ->
 
-        def type = jedis.type(sServices)
 
-        if (!(type in ['none', 'list'])) {
-            throw [sServices, 'none or list', type] as PushDBException
+            def type = jedis.type(sServices)
+
+            if (!(type in ['none', 'list'])) {
+                throw [sServices, 'none or list', type] as PushDBException
+            }
         }
 
     }
@@ -67,102 +69,115 @@ final class PushDB {
     PushdUser addUser(String name) throws PushDBException {
         def prefName = sUsersPrefix + name
 
-        Jedis jedis = this.jedis
-        if(!jedis.hsetnx(prefName,'name',name)) {
-            throw ["can't add user $name: $prefName already present"] as PushDBException
-        }
+        exec { Jedis jedis ->
+            if(!jedis.hsetnx(prefName,'name',name)) {
+                throw ["can't add user $name: $prefName already present"] as PushDBException
+            }
 
-        jedis.hset(prefName, sSubscriptions,'')
+            jedis.hset(prefName, sSubscriptions,'')
+        }
 
         new PushdUserImpl(name)
     }
 
     Boolean existsUser(String name) {
-        this.jedis.exists sUsersPrefix + name
+        exec { Jedis jedis ->
+            jedis.exists sUsersPrefix + name
+        }
     }
 
     PushdUserList getUsers() throws PushDBException {
-        Jedis jedis = this.jedis
-        def list = jedis.keys(sUsersPrefix+'*').collect { String username ->
-            try {
-                ((username  =~ ':(.+?)$')[0] as ArrayList<String>)[1] //I like type hinting in Idea
-            } catch (IndexOutOfBoundsException ignore) {
-                throw ["Invalid username found in Redis: $username"] as PushDBException
-            }
-        }
-
-        Map uMap
-        uMap = [
-            getAt : { String name ->
-                this.existsUser(name) ? new PushdUserImpl(name) : null
-            },
-
-            add : { String name ->
-                this.addUser name
-            },
-
-            contains: { String name ->
-              this.existsUser name
-            },
-
-            iterator : {
-                Map impl //needed for runtime
-                impl = [
-                    lIter : list.iterator(),
-
-                    hasNext : {
-                        impl.lIter.hasNext()
-                    },
-
-                    next : {
-                        new PushdUserImpl(impl.lIter.next() as String)
-                    },
-
-                    remove : {
-                        throw ["Remove not implemented"] as UnsupportedOperationException
-                    }
-                ]
-
-                impl as Iterator<PushdUser>
+        exec { Jedis jedis ->
+            def list = jedis.keys(sUsersPrefix+'*').collect { String username ->
+                try {
+                    ((username  =~ ':(.+?)$')[0] as ArrayList<String>)[1] //I like type hinting in Idea
+                } catch (IndexOutOfBoundsException ignore) {
+                    throw ["Invalid username found in Redis: $username"] as PushDBException
+                }
             }
 
-        ]
-        uMap as PushdUserList
+            Map uMap
+            uMap = [
+                getAt : { String name ->
+                    this.existsUser(name) ? new PushdUserImpl(name) : null
+                },
+
+                add : { String name ->
+                    this.addUser name
+                },
+
+                contains: { String name ->
+                  this.existsUser name
+                },
+
+                iterator : {
+                    Map impl //needed for runtime
+                    impl = [
+                        lIter : list.iterator(),
+
+                        hasNext : {
+                            impl.lIter.hasNext()
+                        },
+
+                        next : {
+                            new PushdUserImpl(impl.lIter.next() as String)
+                        },
+
+                        remove : {
+                            throw ["Remove not implemented"] as UnsupportedOperationException
+                        }
+                    ]
+
+                    impl as Iterator<PushdUser>
+                },
+
+                toString: {
+                    ((uMap['iterator'] as Closure)() as List) as String
+                }
+
+            ]
+        } as PushdUserList
     }
 
     PushdSubscriptions getServicesForUser(String user) {
-        Jedis jedis = this.jedis
-        def prefixUser = sUsersPrefix + user
 
-        def subsString
+        exec { Jedis jedis ->
+            def prefixUser = sUsersPrefix + user
 
-        if ((subsString = jedis.hget(prefixUser, sSubscriptions)) == null || subsString.endsWith(':')) {
-            throw ["user $user has malformed fields or is not existant"] as PushDBException
-        }
+            def subsString
 
-        subsString = subsString.split(':') as LinkedList
+            if ((subsString = jedis.hget(prefixUser, sSubscriptions)) == null || subsString.endsWith(':')) {
+                throw ["user $user has malformed fields or is not existant"] as PushDBException
+            }
 
-        Map subs;
-        subs = [
+            LinkedList<String> subscriptions = subsString.split(':')
 
-            haystack: subsString,
+            Map subs;
+            subs = [
 
-            contains: { String needle ->
-                needle in subs.haystack
-            },
+                contains: { String needle ->
+                    needle in subscriptions
+                },
 
-            add: { String serviceName ->
-                this.registerUserToService(user, serviceName)
-                subs.haystack << serviceName
-            },
+                add: { String serviceName ->
+                    this.registerUserToService(user, serviceName)
+                    subscriptions << serviceName
+                },
 
-            leftShift: { Connector connector ->
-                subs.add connector.name
-            },
+                leftShift: { Connector connector ->
+                    subs.add connector.name
+                },
 
-            iterator: { subs.haystack.iterator() }
-        ]
-        subs as PushdSubscriptions
+                iterator: {
+                    subscriptions.iterator()
+                },
+
+                toString: {
+                    subscriptions as String
+                }
+            ]
+        } as PushdSubscriptions
+
     }
 
     Boolean isUserRegisteredTo(String user, String serviceName)  throws PushDBException {
@@ -175,36 +190,35 @@ final class PushDB {
             throw ["$serviceName is an invalid connector name"] as PushDBException
         }
 
-        Jedis jedis = this.jedis
+        exec { Jedis jedis ->
+            String prefixName = sUsersPrefix + userName, services
 
-        String prefixName = sUsersPrefix + userName, services
+            if(!(services = jedis.hget(prefixName,sSubscriptions)) || services.endsWith(':')) {
+                throw ["unexistant user or corrupted $sSubscriptions field for $userName"] as PushDBException
+            }
 
-        if(!(services = jedis.hget(prefixName,sSubscriptions)) || services.endsWith(':')) {
-            throw ["unexistant user or corrupted $sSubscriptions field for $userName"] as PushDBException
+            services << serviceName
+
+            jedis.hset prefixName,sSubscriptions,services
         }
-
-        services << serviceName
-
-        jedis.hset prefixName,sSubscriptions,services
 
     }
 
-    //gets a jedis from the pool, initialized correctly with db number and all the things we all love.
-    @PackageScope Jedis getJedis() {
-        def jedis = this.mConnectionPool.resource
-        jedis.select Config.values.redisDb
-        jedis
+
+    JedisPool getPool() {
+        this.mConnectionPool
     }
 
     private void mapSerialize(String prefix, String identifier, Map map) throws PushDBException {
         identifier = prefix + identifier
-        Jedis jedis = this.jedis
-        def type = jedis.type identifier
-        if (!(type in  ['hash','none'])) {
-            throw [identifier,'hash',type] as PushDBException
-        }
+        exec { Jedis jedis ->
+            def type = jedis.type identifier
+            if (!(type in  ['hash','none'])) {
+                throw [identifier,'hash',type] as PushDBException
+            }
 
-        jedis.hmset identifier,map
+            jedis.hmset identifier,map
+        }
     }
 
     /**
@@ -215,21 +229,22 @@ final class PushDB {
      */
     private void checkFieldValid(String field, String... types) {
 
-        Jedis jedis = this.jedis
         PushDBException exc;
-        if (types) {
-            if (!jedis.exists(field)) {
-                exc = ["$field does not exist in database"]
-            }
-        } else {
-            def type = jedis.type(field)
-            if (!(type in types)) {
-                exc = [field, { //unwrap parameters
-                    StringBuffer buf = [types[0]]
-                    types[1..-1].each { buf << ' or ' ; buf << it }
+        exec { Jedis jedis ->
+            if (types) {
+                if (!jedis.exists(field)) {
+                    exc = ["$field does not exist in database"]
+                }
+            } else {
+                def type = jedis.type(field)
+                if (!(type in types)) {
+                    exc = [field, { //unwrap parameters
+                        StringBuffer buf = [types[0]]
+                        types[1..-1].each { buf << ' or ' ; buf << it }
 
-                    buf.toString()
-                }(), type]
+                        buf.toString()
+                    }(), type]
+                }
             }
         }
 
@@ -237,6 +252,23 @@ final class PushDB {
             throw exc
         }
 
+    }
+
+    /**
+     * Executes a database operation. Every closure gets a jedis instance and returns a value (if any).
+     * This is preferred than accessing the pool directly because ensures that the instance is given back to it.
+     * @param closure A Closure to be executed
+     * @return Anything the closure returns
+     */
+    def exec(Closure closure) {
+        def jedis = this.mConnectionPool.resource
+        jedis.select Config.values.redisDb
+
+        def result = closure jedis
+
+        this.mConnectionPool.returnResource jedis
+
+        result
     }
 
     private class PushdUserImpl implements PushdUser {
@@ -255,6 +287,11 @@ final class PushDB {
         @Override
         PushdSubscriptions getSubscriptions() throws PushDBException {
             PushDB.this.getServicesForUser(this.mName)
+        }
+
+        @Override
+        String toString() {
+            "$mName, subscribed to ${this.subscriptions}"
         }
     }
 }
