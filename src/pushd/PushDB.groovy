@@ -77,7 +77,7 @@ final class PushDB {
             jedis.hset(prefName, sSubscriptions,'')
         }
 
-        new PushdUserImpl(name)
+        [name] as PushdUser
     }
 
     Boolean existsUser(String name) {
@@ -96,46 +96,7 @@ final class PushDB {
                 }
             }
 
-            Map uMap
-            uMap = [
-                getAt : { String name ->
-                    this.existsUser(name) ? new PushdUserImpl(name) : null
-                },
 
-                add : { String name ->
-                    this.addUser name
-                },
-
-                contains: { String name ->
-                  this.existsUser name
-                },
-
-                iterator : {
-                    Map impl //needed for runtime
-                    impl = [
-                        lIter : list.iterator(),
-
-                        hasNext : {
-                            impl.lIter.hasNext()
-                        },
-
-                        next : {
-                            new PushdUserImpl(impl.lIter.next() as String)
-                        },
-
-                        remove : {
-                            throw ["Remove not implemented"] as UnsupportedOperationException
-                        }
-                    ]
-
-                    impl as Iterator<PushdUser>
-                },
-
-                toString: {
-                    ((uMap['iterator'] as Closure)() as List) as String
-                }
-
-            ]
         } as PushdUserList
     }
 
@@ -155,13 +116,19 @@ final class PushDB {
             Map subs;
             subs = [
 
-                contains: { String needle ->
-                    needle in subscriptions
+                isCase: { needle ->
+                    (':' + needle + ':') in subscriptions
                 },
 
                 add: { String serviceName ->
-                    this.registerUserToService(user, serviceName)
+                    this.registerUserToService user, serviceName
                     subscriptions << serviceName
+                },
+
+                remove: {
+                    String serviceName ->
+                    this.removeUserFromService user, serviceName
+                    subscriptions.remove serviceName
                 },
 
                 leftShift: { Connector connector ->
@@ -191,13 +158,44 @@ final class PushDB {
         }
 
         exec { Jedis jedis ->
+
             String prefixName = sUsersPrefix + userName, services
 
             if(!(services = jedis.hget(prefixName,sSubscriptions)) || services.endsWith(':')) {
                 throw ["unexistant user or corrupted $sSubscriptions field for $userName"] as PushDBException
             }
 
-            services << serviceName
+            if(services.contains(':' + serviceName + ':')) {
+                throw ["User $userName already subscribed to $serviceName"] as PushDBException
+            }
+
+            services << (':' + serviceName)
+
+            jedis.hset prefixName,sSubscriptions,services
+        }
+
+    }
+
+    void removeUserFromService(String userName, String serviceName) throws PushDBException {
+        if (!isValidConnectorName(serviceName)) {
+            throw ["$serviceName is an invalid connector name"] as PushDBException
+        }
+
+        each { Jedis jedis ->
+            String prefixName = sUsersPrefix + userName, services, colonName = ':' + serviceName + ':'
+
+            if(!(services = jedis.hget(prefixName,sSubscriptions)) || services.endsWith(':')) {
+                throw ["unexistant user or corrupted $sSubscriptions field for $userName"] as PushDBException
+            }
+
+            Integer index
+
+            if((index = services.indexOf(colonName)) < 0) {
+                throw ["User $userName is not subscribed to $serviceName"] as PushDBException
+            }
+
+            StringBuffer buffer = [services.substring(0,index)]
+            buffer << services.substring(index + colonName.length() - 1 )
 
             jedis.hset prefixName,sSubscriptions,services
         }
@@ -260,7 +258,7 @@ final class PushDB {
      * @param closure A Closure to be executed
      * @return Anything the closure returns
      */
-    def exec(Closure closure) {
+    @PackageScope def exec(Closure closure) {
         def jedis = this.mConnectionPool.resource
         jedis.select Config.values.redisDb
 
@@ -270,46 +268,90 @@ final class PushDB {
 
         result
     }
+}
 
-    private class PushdUserImpl implements PushdUser {
+class PushdUserList implements Iterable<PushdUser> {
 
-        private String mName
+    private List<String> mList
 
-        PushdUserImpl(String userName) {
-            this.mName = userName
-        }
+    PushdUserList(List<String> userList) {
+        this.mList = userList
+    }
 
-        @Override
-        String getName() {
-            this.mName
-        }
+    PushdUser getAt(String name) throws PushDBException {
+        PushDB.db.existsUser(name) ? [name] as PushdUser : null
+    }
 
-        @Override
-        PushdSubscriptions getSubscriptions() throws PushDBException {
-            PushDB.this.getServicesForUser(this.mName)
-        }
+    PushdUser newUser(String name) throws PushDBException {
+        def newUser = PushDB.db.addUser name
+        this.mList << name
+        newUser
+    }
 
-        @Override
-        String toString() {
-            "$mName, subscribed to ${this.subscriptions}"
-        }
+    PushdUser leftShift(String name) throws PushDBException {
+        this.newUser name
+    }
+
+    Boolean isCase(String name) throws PushDBException {
+        PushDB.db.existsUser name
+    }
+
+    Iterator<PushdUser> iterator() {
+        Map impl //needed for runtime
+        impl = [
+                lIter : this.mList.iterator(),
+
+                hasNext : {
+                    impl.lIter.hasNext()
+                },
+
+                next : {
+                    [impl.lIter.next() as String] as PushdUser
+                },
+
+                remove : {
+                    throw ["Remove not implemented"] as UnsupportedOperationException
+                }
+        ]
+
+        impl as Iterator<PushdUser>
+    }
+
+    @Override
+    String toString() {
+        this.mList as String
+    }
+
+    def getProperty(String name) {
+        this[name]
     }
 }
 
-interface PushdUserList extends Iterable<PushdUser> {
-    PushdUser getAt(String name) throws PushDBException
-    PushdUserList add(String name) throws PushDBException
-    Boolean contains(String name) throws PushDBException
-}
+class PushdUser {
+    private String mName
 
-interface PushdUser {
-    String getName()
-    PushdSubscriptions getSubscriptions() throws PushDBException
+    PushdUser(String userName) {
+        this.mName = userName
+    }
+
+    String getName() {
+        this.mName
+    }
+
+    PushdSubscriptions getSubscriptions() throws PushDBException {
+        PushDB.db.getServicesForUser(this.mName)
+    }
+
+    String toString() {
+        "$mName, subscribed to ${this.subscriptions}"
+    }
 }
 
 interface PushdSubscriptions extends Iterable<String> {
-    Boolean contains(String service) throws PushDBException
+    Boolean isCase(String service) throws PushDBException
+    Boolean isCase(Connector service) throws PushDBException
     void add(String service) throws PushDBException
+    void remove(String service) throws PushDBException
     void leftShift(Connector connector) throws PushDBException
 }
 

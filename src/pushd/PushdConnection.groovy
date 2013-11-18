@@ -19,16 +19,167 @@
 
 package pushd
 
+import groovy.json.JsonException
+import groovy.json.JsonSlurper
+import groovy.util.logging.Log
+
 /**
  * Handles a connection with a client.
  */
+@Log
 class PushdConnection extends Thread {
 
-    private Reader mInput
-    private Writer mOutput
+    private BufferedReader mInput
+    private BufferedWriter mOutput
 
-    PushdConnection(Reader input, Writer output) {
+    PushdConnection(BufferedReader input, BufferedWriter output) {
         (mInput,mOutput) = [input,output]
+    }
+
+    @Override
+    void run() {
+        try {
+            while(true) {
+                String line = this.mInput.readLine()
+                Request req = [line] as Request
+                switch (req.request) {
+                    case Request.REGISTER:
+                        if (!req.content.name){
+                            throw ["No name given"] as PushdOperationException
+                        }
+                        registerUser req.content.name as String
+                        break
+
+                    case Request.PUSH:
+                        /*TODO: implement logic */
+                        break
+
+                    case Request.LOAD:
+                        if (!req.content.jar) {
+                            throw ["No jar path given"] as PushdOperationException
+                        }
+
+                        Connector.load req.content.jar as String, req.content as Map
+                        break
+
+                    case Request.SUBSCRIBE:
+                        if (!req.content.name){
+                            throw ['No name given'] as PushdOperationException
+                        }
+
+                        String name = req.content.name
+
+                        PushdUser user
+                        if(!(user = PushDB.db.users[name])) {
+                            throw ["no user $name found in database"] as PushdOperationException
+                        }
+
+                        user.subscriptions << name
+
+                        break
+
+                    default:
+                        log.severe "Weird error, request $req.request has been allowed. Report bug."
+                        break
+                }
+            }
+        } catch(PushdRequestException | PushDBException | PushdOperationException e) {
+            this.mOutput << error(e.localizedMessage)
+        } finally {
+            [mInput,mOutput].each { it.close() }
+        }
+
+    }
+
+    private static void registerUser(String name) throws PushDBException, PushdOperationException {
+
+        PushDB.db.users << name
+
+    }
+
+    private static String error(String message) {
+        "{ \"error\" : \"$message\"}"
+    }
+
+}
+
+class Response {
+
+    static {
+        Closure<String> format = (String.&format).curry '{ "response" : "%s" }'
+        OK = format 'OK'
+        MALFORMED = format 'MALFORMED'
+    }
+
+    final static String OK, MALFORMED
+
+}
+
+class Request {
+
+    static {
+        VALID_VALUES = ['REGISTER', 'PUSH', 'LOAD', 'SUBSCRIBE', 'UNSUBSCRIBE'].asImmutable()
+        (REGISTER, PUSH, LOAD, SUBSCRIBE, UNSUBSCRIBE) = VALID_VALUES
+    }
+
+    final static String REGISTER, PUSH, LOAD, SUBSCRIBE, UNSUBSCRIBE
+    final static List<String> VALID_VALUES
+
+    private Map mObj
+    private String mRequest
+
+    Request(String text) throws PushdRequestException {
+        try {
+            def res = ([] as JsonSlurper).parseText text
+            if (!(Map.isAssignableFrom(res.class))){
+                throw ['Non-object json response'] as PushdRequestException
+            }
+
+            this.mObj = (res as Map).asImmutable()
+            if (!(this.mRequest = this.mObj.request)) {
+                throw ['Malformed request: invalid request field'] as PushdRequestException
+            }
+
+            this.mRequest = this.mRequest.trim().toUpperCase()
+            if(!(this.mRequest in VALID_VALUES)) {
+                throw ["Invalid request: ${this.mRequest}"] as PushdRequestException
+            }
+
+        } catch (JsonException ignore) {
+            throw ['Malformed message received'] as PushdRequestException
+        }
+    }
+
+    String getRequest() {
+        this.mRequest
+    }
+
+    Map getContent() {
+        this.mObj
+    }
+
+}
+
+class PushdRequestException extends Exception {
+
+    PushdRequestException(String string) {
+        super(string)
+    }
+
+    PushdRequestException(Throwable t) {
+        super(t)
+    }
+
+}
+
+class PushdOperationException extends Exception {
+
+    PushdOperationException(String string) {
+        super(string)
+    }
+
+    PushdOperationException(Throwable t) {
+        super(t)
     }
 
 }

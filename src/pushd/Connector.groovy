@@ -52,7 +52,7 @@ abstract class Connector {
         !(':' in name) && (name in sConnectors.collect { it.name })
     }
 
-    static Connector load(String jarPath, ConfigObject connectorConfig) throws ConnectorException,IOException {
+    static Connector load(String jarPath, Map connectorConfig) throws ConnectorException,IOException {
 
         //making this absolute
         jarPath = ([jarPath] as File).absolutePath
@@ -211,6 +211,11 @@ abstract class Connector {
      */
     void destroy() {
         sConnectors -= this
+    }
+
+    @Override
+    String toString() {
+        this.mName
     }
 
 }
