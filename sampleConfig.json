@@ -1,0 +1,10 @@
+{
+    "logPath" : "/var/log/pushd.log",
+    "socket" : "/run/pushd.socket",
+    "connectorsPath" : "/path/to/plugins",
+    "connectors" : {
+        "gcm" : {
+            "confInfo" : "whatever"
+        }
+    }
+}
