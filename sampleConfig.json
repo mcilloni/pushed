@@ -1,7 +1,7 @@
 {
     "logPath" : "/var/log/pushd.log",
-    "socket" : "/run/pushd.socket",
-    "connectorsPath" : "/path/to/plugins",
+    "postgres" : "",
+    "socket" : "/run/pushd"
     "connectors" : {
         "gcm" : {
             "confInfo" : "whatever"

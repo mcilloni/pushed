@@ -10,18 +10,17 @@ import (
 	"path"
 )
 
+type PostgresStr string
+
 type ConnParams struct {
 	Unix   bool
-	Host   uint16
+	Port   uint16
 	Socket string
 }
 
-type GcmParams struct {
-}
-
 type Config struct {
-	Connection ConnParams
-	Gcm        GcmParams
+	BindOpt  ConnParams
+	PsqlConn PostgresStr
 }
 
 func Parse(confPath string) (config *Config, e error) {
@@ -70,26 +69,38 @@ func Parse(confPath string) (config *Config, e error) {
 
 	}
 
-	value, okHost := mapValues["host"]
+	value, okPort := mapValues["port"]
 
-	if okHost {
+	if okPort {
 
 		if okSocket {
-			return nil, errors.New("both host and socket are specified on configuration file " + confPath)
+			return nil, errors.New("both port and socket are specified on configuration file " + confPath)
 		}
 
-		if host, ok := value.(uint16); ok {
-			connParams = ConnParams{Unix: false, Host: host}
+		if port, ok := value.(uint16); ok {
+			connParams = ConnParams{Unix: false, Port: port}
 		} else {
-			return nil, errors.New("invalid host number " + fmt.Sprintf("%s", value))
+			return nil, errors.New("invalid port number " + fmt.Sprintf("%s", value))
 		}
 
 	}
 
-	if !(okHost || okSocket) {
-		return nil, errors.New("neither host nor socket set in " + confPath)
+	if !(okPort || okSocket) {
+		return nil, errors.New("neither port nor socket set in " + confPath)
 	}
 
-	return &Config{connParams, GcmParams{}}, e
+	value, okConnStr := mapValues["postgres"]
+
+	if !okConnStr {
+		return nil, errors.New("No postgres connection string in " + confPath)
+	}
+
+	connStr, ok := value.(string)
+
+	if !ok {
+		return nil, errors.New("Field postgres in " + confPath + " is not a string")
+	}
+
+	return &Config{connParams, PostgresStr(connStr)}, nil
 
 }

@@ -1,11 +1,5 @@
 package server
 
-import (
-	"errors"
-	"fmt"
-	"net"
+const (
+	connSpace = ":conns"
 )
-
-type Connector interface {
-    
-}

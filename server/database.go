@@ -1,144 +1,151 @@
 package server
 
 import (
+    "container/list"
+	"database/sql"
 	"errors"
-	"fmt"
-	"github.com/fzzy/radix/redis"
+	_ "github.com/lib/pq"
 	"log"
-	"strings"
 )
 
-const (
-	userSpace = "pushdusers:"
+type db struct {
+	conn                                                        *sql.DB
+	userAddStmt, userDelStmt, gcmRegAdd, gcmRegDel, gcmRegFetch *sql.Stmt
+}
+
+var (
+	ErrUserNotExisting = errors.New("User is not existant")
+	ErrUserExists      = errors.New("User already exists")
 )
 
-type Subscriptions []string
-
-type Db struct {
-	client *redis.Client
-}
-
-func DialDb(network, addr string) (*Db, error) {
-	log.Printf("Connecting to %s via %s", addr, network)
-	client, e := redis.Dial(network, addr)
+func dialDb(connstr string) (*db, error) {
+	log.Println("Connecting to postgresql...")
+	conn, e := sql.Open("postgres", connstr)
 
 	if e != nil {
 		return nil, e
 	}
 
-	return &Db{client}, nil
-}
-
-func (db *Db) GetSubs(id string) (Subscriptions, error) {
-	reply := db.client.Cmd("SMEMBERS", userSpace+id)
-
-	switch reply.Type {
-	case redis.ErrorReply:
-		return nil, reply.Err
-	case redis.NilReply:
-		return nil, errors.New(id + " not registered")
-	case redis.MultiReply:
-		break
-	default:
-		return nil, errors.New("Fatal error, broken redis connector")
+	if e = conn.Ping(); e != nil {
+		return nil, e
 	}
 
-	info, e := reply.List()
+	dbInst := new(db)
+
+	dbInst.conn = conn
+
+	e = gcmInitStmt(dbInst)
 
 	if e != nil {
 		return nil, e
 	}
 
-	return info, nil
+	dbInst.userAddStmt, e = conn.Prepare("INSERT INTO USERS VALUES ($1)")
+
+	if e != nil {
+		return nil, e
+	}
+
+	dbInst.userDelStmt, e = conn.Prepare("DELETE FROM USERS WHERE ID = $1")
+
+	if e != nil {
+		return nil, e
+	}
+
+	return dbInst, nil
+}
+
+func (db *db) close() (e error) {
+
+    if e = gcmCloseStmt(db); e != nil {
+        return
+    }
+
+    if e = db.userAddStmt.Close(); e != nil {
+        return
+    }
+
+    if e = db.userDelStmt.Close(); e != nil {
+        return
+    }
+
+	return db.conn.Close()
 
 }
 
-func (db *Db) Subscribe(name, connector string) error {
+func (db *db) probe() error {
+	return db.conn.Ping()
+}
 
-	log.Printf("Subscribing %s to %s", name, connector)
+func (db *db) users() (*list.List, error) {
 
-	reply := db.client.Cmd("SADD", userSpace+name, connector)
-	switch reply.Type {
-	case redis.ErrorReply:
-		return reply.Err
-	case redis.IntegerReply:
-		ok, e := reply.Bool()
+	people := list.New()
 
-		if e != nil {
-			return e
-		}
+	rows, e := db.conn.Query("SELECT ID FROM USERS")
 
-		if !ok {
-			return fmt.Errorf("Failed to add to set %s connector %s", userSpace+name, connector)
-		}
-		break
-	default:
-		return errors.New("Broken connector")
+	if e != nil {
+		return nil, e
 	}
+
+	var id int64
+
+	for rows.Next() {
+		if e = rows.Scan(&id); e != nil {
+			return nil, e
+		}
+
+		people.PushBack(id)
+	}
+
+	if e = rows.Err(); e != nil {
+		return nil, e
+	}
+
+	return people, nil
+
+}
+
+func (db *db) userAdd(id int64) error {
+	log.Printf("Adding user %d...", id)
+
+	_, e := db.userAddStmt.Exec(id)
+
+	return e
+}
+
+func (db *db) userDel(id int64) error {
+	log.Printf("Deleting user %d...", id)
+
+	_, e := db.userDelStmt.Exec(id)
+
+	return e
+
+}
+
+func InitDb(connstr string) error {
+
+	db, e := dialDb(connstr)
+
+	if e != nil {
+		return e
+	}
+
+	log.Println("Connected.\nCreating table USERS...")
+
+	_, e = db.conn.Exec("CREATE TABLE USERS (ID BIGINT PRIMARY KEY CHECK (ID > -1))")
+
+	if e != nil {
+		return e
+	}
+
+	log.Println("Done.\nCreating table GCM...")
+
+	if e = db.initGcmTable(); e != nil {
+		return e
+	}
+
+	log.Println("Done.")
 
 	return nil
-}
-
-func (db *Db) Unsubscribe(name, connector string) error {
-
-	log.Printf("Unsubscribing %s from %s", name, connector)
-
-	reply := db.client.Cmd("SREM", userSpace+name, connector)
-
-	switch reply.Type {
-	case redis.ErrorReply:
-		return reply.Err
-	case redis.IntegerReply:
-		ok, e := reply.Bool()
-
-		if e != nil {
-			return e
-		}
-
-		if !ok {
-			return fmt.Errorf("%s is not subscribed to %s", userSpace+name, connector)
-		}
-		break
-	default:
-		return errors.New("Broken connector")
-	}
-
-	return nil
-
-}
-
-func (db *Db) Users() ([]string, error) {
-	reply := db.client.Cmd("KEYS", userSpace+"*")
-
-	switch reply.Type {
-	case redis.ErrorReply:
-		return nil, reply.Err
-	case redis.NilReply:
-		return nil, errors.New("No user registered")
-	case redis.MultiReply:
-		break
-	default:
-		return nil, errors.New("Fatal error, broken redis connector")
-	}
-
-	list, e := reply.List()
-
-	if e != nil {
-		return nil, e
-	}
-
-	var keySplit []string
-
-	for i, key := range list {
-		keySplit = strings.Split(key, ":")
-		if len(keySplit) != 2 {
-			return nil, fmt.Errorf("Malformed username %s in %s", key, userSpace)
-		}
-
-		list[i] = keySplit[1]
-
-	}
-
-	return list, nil
 
 }
