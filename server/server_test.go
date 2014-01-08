@@ -1,18 +1,18 @@
 package server
 
 import (
-	"math/rand"
+	//	"math/rand"
 	"testing"
-	"time"
+	//	"time"
 )
 
 /*func TestCreate(t *testing.T) {
-    if e :=InitDb("user=pushd dbname=pushd host=/run/postgresql sslmode=disable"); e != nil {
-        t.Error(e.Error())
-    }
+	if e := InitDb("user=pushd dbname=pushd host=/run/postgresql sslmode=disable"); e != nil {
+		t.Error(e.Error())
+	}
 }*/
 
-const fakeRegId = "ASH3R2R2FOIC2CRMOMXWHRXR24C22"
+/*const fakeRegId = "ASH3R2R2FOIC2CRMOMXWHRXR24C22"
 
 var username int64
 var dbInst *db
@@ -74,7 +74,7 @@ func TestAddUser(t *testing.T) {
 func TestAddGcmRegId(t *testing.T) {
 	t.Logf("Adding fake RegID to user %d in db", username)
 
-	if e := dbInst.addGcmRegistrationId(username, fakeRegId); e != nil {
+	if e := dbInst.gcmAddRegistrationId(username, fakeRegId); e != nil {
 		t.Error(e)
 		return
 	}
@@ -122,7 +122,7 @@ func TestGcmCascade(t *testing.T) {
 
     t.Log("Checking if db delete cascade deleted regid on userdel")
 
-    regids,e := dbInst.getRegistrationIdsForId(username)
+    regids,e := dbInst.gcmGetRegistrationIdsForId(username)
 
     if e != nil {
         t.Error(e)
@@ -152,6 +152,13 @@ func TestCloseDb(t *testing.T) {
 		t.Error(e)
 	}
 
+}*/
+
+func TestMarshal(t *testing.T) {
+	gcmI := new(gcm)
+
+	gcmI.Push([]string{"abc", "def"}, Message{
+		"gigia": "bargigia",
+		"giga":  "bargiga",
+	})
 }
-
-

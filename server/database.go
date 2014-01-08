@@ -1,11 +1,12 @@
 package server
 
 import (
-    "container/list"
+	"container/list"
 	"database/sql"
 	"errors"
 	_ "github.com/lib/pq"
 	"log"
+	"sync"
 )
 
 type db struct {
@@ -57,17 +58,17 @@ func dialDb(connstr string) (*db, error) {
 
 func (db *db) close() (e error) {
 
-    if e = gcmCloseStmt(db); e != nil {
-        return
-    }
+	if e = gcmCloseStmt(db); e != nil {
+		return
+	}
 
-    if e = db.userAddStmt.Close(); e != nil {
-        return
-    }
+	if e = db.userAddStmt.Close(); e != nil {
+		return
+	}
 
-    if e = db.userDelStmt.Close(); e != nil {
-        return
-    }
+	if e = db.userDelStmt.Close(); e != nil {
+		return
+	}
 
 	return db.conn.Close()
 
@@ -124,7 +125,20 @@ func (db *db) userDel(id int64) error {
 
 func InitDb(connstr string) error {
 
-	db, e := dialDb(connstr)
+	log.Println("Connecting to postgresql...")
+	conn, e := sql.Open("postgres", connstr)
+
+	if e != nil {
+		return e
+	}
+
+	if e = conn.Ping(); e != nil {
+		return e
+	}
+
+	dbInst := new(db)
+
+	dbInst.conn = conn
 
 	if e != nil {
 		return e
@@ -132,7 +146,7 @@ func InitDb(connstr string) error {
 
 	log.Println("Connected.\nCreating table USERS...")
 
-	_, e = db.conn.Exec("CREATE TABLE USERS (ID BIGINT PRIMARY KEY CHECK (ID > -1))")
+	_, e = dbInst.conn.Exec("CREATE TABLE USERS (ID BIGINT PRIMARY KEY CHECK (ID > -1))")
 
 	if e != nil {
 		return e
@@ -140,7 +154,7 @@ func InitDb(connstr string) error {
 
 	log.Println("Done.\nCreating table GCM...")
 
-	if e = db.initGcmTable(); e != nil {
+	if e = dbInst.gcmInitTable(); e != nil {
 		return e
 	}
 
