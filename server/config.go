@@ -3,29 +3,27 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/mcilloni/pushd/backend"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
+	"time"
 )
 
-type PostgresStr string
-
-type ConnParams struct {
-	Unix   bool
-	Port   uint16
-	Socket string
+type connParams struct {
+	TcpInfo string
+	Socket  string
 }
 
-type Config struct {
-	BindOpt  ConnParams
-	PsqlConn PostgresStr
+type config struct {
+	Listen      *connParams
+	Postgres    string
+	Gcm         *backend.GcmConfig
+	Dispatchers uint8
 }
 
-func Parse(confPath string) (config *Config, e error) {
-
-	config = nil
+func Parse(confPath string) (conf *config, e error) {
 
 	log.Println("Parsing JSON config file " + confPath)
 
@@ -35,7 +33,7 @@ func Parse(confPath string) (config *Config, e error) {
 		return
 	}
 
-	var values interface{}
+	var values config
 
 	e = json.Unmarshal(fileContents, &values)
 
@@ -43,19 +41,13 @@ func Parse(confPath string) (config *Config, e error) {
 		return
 	}
 
-	mapValues := values.(map[string]interface{})
+	if (values.Listen.TcpInfo != "") == (values.Listen.Socket != "") {
+		return nil, errors.New("both (neither) port and (nor) socket are specified on configuration file " + confPath)
+	}
 
-	var connParams ConnParams
+	if values.Listen.Socket != "" {
 
-	value, okSocket := mapValues["socket"]
-
-	if okSocket {
-
-		socket, ok := value.(string)
-
-		if !ok {
-			return nil, errors.New("socket set but not string")
-		}
+		socket := values.Listen.Socket
 
 		if !path.IsAbs(socket) {
 			return nil, errors.New("given path " + socket + "is not absolute")
@@ -65,42 +57,32 @@ func Parse(confPath string) (config *Config, e error) {
 			return nil, errors.New("cannot create a socket on already existing file " + socket)
 		}
 
-		connParams = ConnParams{Unix: true, Socket: socket}
-
 	}
 
-	value, okPort := mapValues["port"]
-
-	if okPort {
-
-		if okSocket {
-			return nil, errors.New("both port and socket are specified on configuration file " + confPath)
-		}
-
-		if port, ok := value.(uint16); ok {
-			connParams = ConnParams{Unix: false, Port: port}
-		} else {
-			return nil, errors.New("invalid port number " + fmt.Sprintf("%s", value))
-		}
-
-	}
-
-	if !(okPort || okSocket) {
-		return nil, errors.New("neither port nor socket set in " + confPath)
-	}
-
-	value, okConnStr := mapValues["postgres"]
-
-	if !okConnStr {
+	if values.Postgres == "" {
 		return nil, errors.New("No postgres connection string in " + confPath)
 	}
 
-	connStr, ok := value.(string)
+	if values.Gcm != nil {
+		if values.Gcm.ApiKey == "" {
+			return nil, errors.New("Gcm config object set but no ApiKey field set")
+		}
 
-	if !ok {
-		return nil, errors.New("Field postgres in " + confPath + " is not a string")
+		if values.Gcm.MaxTcpConns == 0 {
+			values.Gcm.MaxTcpConns = backend.GcmDefaultMaxHttpConns
+		}
+
+		if values.Gcm.MaxRetryTime == 0 {
+			values.Gcm.MaxRetryTime = backend.GcmDefaultMaxSleepBeforeFail
+		} else {
+			values.Gcm.MaxRetryTime *= time.Second //I don't expect people to input nanoseconds ;)
+		}
 	}
 
-	return &Config{connParams, PostgresStr(connStr)}, nil
+	if values.Dispatchers == 0 {
+		values.Dispatchers = DefaultDispatchers
+	}
+
+	return &values, nil
 
 }

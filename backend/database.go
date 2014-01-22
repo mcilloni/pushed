@@ -1,4 +1,4 @@
-package server
+package backend
 
 import (
 	"container/list"
@@ -6,18 +6,35 @@ import (
 	"errors"
 	_ "github.com/lib/pq"
 	"log"
-	"sync"
 )
-
-type db struct {
-	conn                                                        *sql.DB
-	userAddStmt, userDelStmt, gcmRegAdd, gcmRegDel, gcmRegFetch *sql.Stmt
-}
 
 var (
-	ErrUserNotExisting = errors.New("User is not existant")
+	ErrUserNotExisting = errors.New("User does not exist")
 	ErrUserExists      = errors.New("User already exists")
+	globalDb           *db
 )
+
+func AddUser(id int64) error {
+	return globalDb.userAdd(id)
+}
+
+func DelUser(id int64) error {
+	return globalDb.userDel(id)
+}
+
+type db struct {
+	conn                                                                      *sql.DB
+	userAddStmt, userDelStmt, gcmRegAdd, gcmRegDel, gcmRegFetch, gcmUpdateReg *sql.Stmt
+}
+
+func ConnectDb(connstr string) (e error) {
+	globalDb, e = dialDb(connstr)
+	return
+}
+
+func CloseDb() error {
+	return globalDb.close()
+}
 
 func dialDb(connstr string) (*db, error) {
 	log.Println("Connecting to postgresql...")
@@ -35,7 +52,7 @@ func dialDb(connstr string) (*db, error) {
 
 	dbInst.conn = conn
 
-	e = gcmInitStmt(dbInst)
+	e = dbInst.gcmInitStmt()
 
 	if e != nil {
 		return nil, e
@@ -58,7 +75,7 @@ func dialDb(connstr string) (*db, error) {
 
 func (db *db) close() (e error) {
 
-	if e = gcmCloseStmt(db); e != nil {
+	if e = db.gcmCloseStmt(); e != nil {
 		return
 	}
 
