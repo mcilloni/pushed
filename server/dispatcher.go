@@ -29,8 +29,6 @@ func dispatch(incoming <-chan net.Conn, forward chan<- command) {
 		request, data []byte
 		e             error
 		read          *bufio.Reader
-		in            net.Conn
-		ok            bool
 	)
 
 	for in := range incoming {

@@ -23,7 +23,7 @@ type config struct {
 	Dispatchers uint8
 }
 
-func Parse(confPath string) (conf *config, e error) {
+func parse(confPath string) (conf *config, e error) {
 
 	log.Println("Parsing JSON config file " + confPath)
 

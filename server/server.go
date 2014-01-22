@@ -10,7 +10,18 @@ const (
 	BuffSize = 10
 )
 
-func Serve(config *config) (e error) {
+func Serve(configPath string) (e error) {
+
+	conf, e := parse(configPath)
+	if e != nil {
+		return
+	}
+
+	return serveConfig(conf)
+
+}
+
+func serveConfig(config *config) (e error) {
 
 	log.Printf("Starting server...")
 
@@ -53,7 +64,7 @@ func Serve(config *config) (e error) {
 
 			if e != nil {
 				log.Println("Will stop accepting connections")
-			    failure <- true //if the error is real (and not caused by close) this will close the server.
+				failure <- true //if the error is real (and not caused by close) this will close the server.
 				break
 			}
 
@@ -81,4 +92,5 @@ func Serve(config *config) (e error) {
 	close(forward)
 	log.Println("Server is halting")
 
+	return
 }
