@@ -49,6 +49,11 @@ func (resp *response) Dump(w io.Writer) (e error) {
 		return
 	}
 
+	e = buffer.WriteByte('\n')
+	if e != nil {
+		return
+	}
+
 	_, e = buffer.WriteTo(w)
 
 	return
@@ -74,9 +79,9 @@ func ParseRequest(head, data []byte) (op *operation, resp *response) {
 		op.Parameters = make([]interface{}, 1)
 
 		switch fieldsLen {
-		case 0:
-			op.Parameters[0] = 0
 		case 1:
+			op.Parameters[0] = time.Duration(0)
+		case 2:
 			val, e := strconv.ParseInt(string(fields[1]), 10, 64)
 
 			if e != nil {
@@ -95,7 +100,7 @@ func ParseRequest(head, data []byte) (op *operation, resp *response) {
 
 	case adduser, deluser:
 
-		if fieldsLen != 1 {
+		if fieldsLen != 2 {
 			return failure("Wrong number of arguments for %s: %d", fields[0], fieldsLen)
 		}
 

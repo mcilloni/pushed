@@ -21,18 +21,18 @@ func InitDatabase(configPath string) (e error) {
 
 }
 
-func Serve(configPath string) (e error) {
+func Serve(configPath string, stop <-chan bool) (e error) {
 
 	conf, e := parse(configPath)
 	if e != nil {
 		return
 	}
 
-	return serveConfig(conf)
+	return serveConfig(conf, stop)
 
 }
 
-func serveConfig(config *config) (e error) {
+func serveConfig(config *config, stop <-chan bool) (e error) {
 
 	log.Printf("Starting server...")
 
@@ -70,12 +70,13 @@ func serveConfig(config *config) (e error) {
 	}
 
 	go func() {
+
 		for {
 			conn, e := srv.Accept()
 
 			if e != nil {
 				log.Println("Will stop accepting connections")
-				failure <- true //if the error is real (and not caused by close) this will close the server.
+				failure <- true //if the error is real (and not caused by Close) this will close the server.
 				break
 			}
 
@@ -86,7 +87,7 @@ func serveConfig(config *config) (e error) {
 	select {
 
 	case <-failure:
-
+		break
 	case f := <-forward:
 
 		switch f {
@@ -96,6 +97,8 @@ func serveConfig(config *config) (e error) {
 		default:
 			panic("Dispatcher broken - non-halt command recvd")
 		}
+	case <-stop:
+		break
 
 	}
 

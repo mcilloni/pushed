@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"github.com/mcilloni/pushed/backend"
+	"io"
 	"log"
 	"net"
 	"sync/atomic"
@@ -19,7 +20,7 @@ var (
 	routines      uint64 = 0
 )
 
-func dispatch(incoming <-chan net.Conn, forward chan<- command) {
+func dispatch(incoming chan net.Conn, forward chan<- command) {
 
 	routineN := atomic.AddUint64(&routines, 1)
 
@@ -31,14 +32,16 @@ func dispatch(incoming <-chan net.Conn, forward chan<- command) {
 		read          *bufio.Reader
 	)
 
+	logerr := func(e error) {
+		if e != io.EOF {
+			log.Printf("Error in routine %d: %s", routineN, e.Error())
+		}
+	}
+
 	for in := range incoming {
 		read = bufio.NewReader(in)
 
 		request, e = read.ReadBytes('\n')
-
-		logerr := func(e error) {
-			log.Printf("Error in routine %d: %s", routineN, e.Error())
-		}
 
 		if e != nil {
 			logerr(e)
@@ -49,6 +52,7 @@ func dispatch(incoming <-chan net.Conn, forward chan<- command) {
 
 		if e != nil {
 			logerr(e)
+			in.Close()
 			continue
 		}
 
@@ -56,17 +60,22 @@ func dispatch(incoming <-chan net.Conn, forward chan<- command) {
 
 		e = resp.Dump(in)
 
-		in.Close()
-
 		if e != nil {
 			logerr(e)
+			in.Close()
 			continue
 		}
 
-		if e = execOp(op, forward); e != nil {
-			logerr(e)
-			continue
+		if resp.Status == accepted {
+
+			if e = execOp(op, forward); e != nil {
+				logerr(e)
+				in.Close()
+				continue
+			}
 		}
+
+		incoming <- in //send connection back for further operations
 
 	}
 

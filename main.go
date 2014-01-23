@@ -6,6 +6,7 @@ import (
 	"github.com/mcilloni/pushed/server"
 	"log"
 	"os"
+	"os/signal"
 )
 
 var (
@@ -57,7 +58,23 @@ func main() {
 		return
 	}
 
-	e := server.Serve(args[0])
+	var e error
+
+	if initDb {
+		e = server.InitDatabase(args[0])
+	} else {
+
+		interr := make(chan os.Signal, 1)
+		stop := make(chan bool, 1)
+		signal.Notify(interr, os.Interrupt)
+
+		go func() {
+			<-interr
+			stop <- true
+		}()
+
+		e = server.Serve(args[0], stop)
+	}
 
 	if e != nil {
 		log.Fatal(e)
