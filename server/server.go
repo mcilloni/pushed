@@ -12,7 +12,7 @@ const (
 
 func InitDatabase(configPath string) (e error) {
 
-    conf, e := parse(configPath)
+	conf, e := parse(configPath)
 	if e != nil {
 		return
 	}
