@@ -18,7 +18,7 @@ var (
 func init() {
 	flag.BoolVar(&help, "help", false, "prints this help")
 	flag.BoolVar(&help, "h", false, "shorthand for -help")
-	flag.BoolVar(&initDb, "init", false, "initializes PostgreSQL with pushed tables as by the Postgres parameter in conffile. createdb the db first, and ensure you have permissions for the given user")
+	flag.BoolVar(&initDb, "initdb", false, "initializes PostgreSQL with pushed tables as by the Postgres parameter in conffile. createdb the db first, and ensure you have permissions for the given user")
 	flag.StringVar(&logPath, "logfile", "", "sets the path of the pushed log file. If not set, it will default to stdout")
 	flag.StringVar(&logPath, "l", "", "shorthand for -logfile")
 }
