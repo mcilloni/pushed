@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/mcilloni/pushd/backend"
+	"github.com/mcilloni/pushed/backend"
 	"log"
 	"net"
 )
@@ -9,6 +9,17 @@ import (
 const (
 	BuffSize = 10
 )
+
+func InitDatabase(configPath string) (e error) {
+
+    conf, e := parse(configPath)
+	if e != nil {
+		return
+	}
+
+	return backend.InitDb(conf.Postgres)
+
+}
 
 func Serve(configPath string) (e error) {
 

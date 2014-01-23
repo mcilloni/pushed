@@ -3,7 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"github.com/mcilloni/pushd/backend"
+	"github.com/mcilloni/pushed/backend"
 	"io/ioutil"
 	"log"
 	"os"
@@ -68,13 +68,7 @@ func parse(confPath string) (conf *config, e error) {
 			return nil, errors.New("Gcm config object set but no ApiKey field set")
 		}
 
-		if values.Gcm.MaxTcpConns == 0 {
-			values.Gcm.MaxTcpConns = backend.GcmDefaultMaxHttpConns
-		}
-
-		if values.Gcm.MaxRetryTime == 0 {
-			values.Gcm.MaxRetryTime = backend.GcmDefaultMaxSleepBeforeFail
-		} else {
+		if values.Gcm.MaxRetryTime != 0 {
 			values.Gcm.MaxRetryTime *= time.Second //I don't expect people to input nanoseconds ;)
 		}
 	}

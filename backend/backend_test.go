@@ -7,7 +7,7 @@ import (
 )
 
 /*func TestCreate(t *testing.T) {
-	if e := InitDb("user=pushd dbname=pushd host=/run/postgresql sslmode=disable"); e != nil {
+	if e := InitDb("user=pushed dbname=pushed host=/run/postgresql sslmode=disable"); e != nil {
 		t.Error(e.Error())
 	}
 }*/
@@ -23,7 +23,7 @@ func TestConnect(t *testing.T) {
 
 	var e error
 
-	dbInst, e = dialDb("user=pushd dbname=pushd host=/run/postgresql sslmode=disable")
+	dbInst, e = dialDb("user=pushed dbname=pushed host=/run/postgresql sslmode=disable")
 
 	if e != nil {
 		t.Error(e)

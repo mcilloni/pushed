@@ -2,7 +2,8 @@ package main
 
 import (
 	"flag"
-	"github.com/mcilloni/pushd/server"
+    "fmt"
+	"github.com/mcilloni/pushed/server"
 	"log"
 	"os"
 )
@@ -10,31 +11,37 @@ import (
 var (
 	confPath string
 	help     bool
+    initDb   bool
 	logPath  string
 )
 
 func init() {
-	flag.StringVar(&confPath, "confpath", "", "Sets the path of a JSON pushd config file. Mandatory, can be shortened to -c")
-	flag.StringVar(&confPath, "c", "", "Shorthand for confpath")
-	flag.BoolVar(&help, "help", false, "Prints this help")
-	flag.BoolVar(&help, "h", false, "Shorthand for -help")
-	flag.StringVar(&logPath, "logfile", "", "Sets the path of the pushd log file. If not set, it will default to stdout")
-	flag.StringVar(&logPath, "l", "", "Shorthand for -logfile")
+	flag.BoolVar(&help, "help", false, "prints this help")
+	flag.BoolVar(&help, "h", false, "shorthand for -help")
+    flag.BoolVar(&initDb, "init", false, "initializes PostgreSQL with pushed tables as by the Postgres parameter in conffile. createdb the db first, and ensure you have permissions for the given user")
+	flag.StringVar(&logPath, "logfile", "", "sets the path of the pushed log file. If not set, it will default to stdout")
+	flag.StringVar(&logPath, "l", "", "shorthand for -logfile")
+}
+
+func printHelp() {
+    fmt.Println("usage: pushed [params] conffile.json")
+    flag.PrintDefaults()
 }
 
 func main() {
 	flag.Parse()
 
 	if help {
-		flag.PrintDefaults()
-		return
+		printHelp()
+        return
 	}
 
 	if logPath != "" {
 		logFile, e := os.OpenFile(logPath, os.O_WRONLY|os.O_APPEND, 0666)
 
 		if e != nil {
-			log.Fatalf("Cannot open %s: %s", logPath, e.Error())
+			fmt.Printf("Cannot open %s: %s\n", logPath, e.Error())
+            return
 		}
 
 		defer logFile.Close()
@@ -42,11 +49,15 @@ func main() {
 		log.SetOutput(logFile)
 	}
 
-	if confPath == "" {
-		log.Fatal("No config path given.")
+    args := flag.Args()
+
+	if len(args) != 1 {
+	    fmt.Println("Wrong number of arguments")
+        printHelp()
+        return
 	}
 
-    e := server.Serve(confPath)
+    e := server.Serve(args[0])
 
 	if e != nil {
 		log.Fatal(e)

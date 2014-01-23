@@ -3,7 +3,7 @@ package server
 import (
 	"bufio"
 	"errors"
-	"github.com/mcilloni/pushd/backend"
+	"github.com/mcilloni/pushed/backend"
 	"log"
 	"net"
 	"sync/atomic"

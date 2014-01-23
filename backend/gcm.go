@@ -180,6 +180,14 @@ func (db *db) gcmUpdateRegId(oldId, newId string) error {
 
 func newGcm(config *GcmConfig) *gcm {
 
+    if config.MaxTcpConns == 0 {
+        config.MaxTcpConns = GcmDefaultMaxHttpConns
+    }
+
+    if config.MaxRetryTime == 0 {
+        config.MaxRetryTime = GcmDefaultMaxSleepBeforeFail
+    }
+
 	return &gcm{
 		apiKey: "key=" + config.ApiKey,
 		client: &http.Client{
@@ -228,7 +236,13 @@ func (gcm *gcm) expRetry(opData *gcmOpData) error {
 		return GcmWontTryAgain
 	}
 
-	time.Sleep(opData.Delay)
+    sleep := opData.Delay
+
+    if 2*opData.Delay > gcm.maxSleep {
+        sleep = gcm.maxSleep
+    }
+
+	time.Sleep(sleep)
 
 	return gcm.payloadPush(opData.Data, 2*opData.Delay)
 

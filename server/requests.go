@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/mcilloni/pushd/backend"
+	"github.com/mcilloni/pushed/backend"
 	"io"
 	"strconv"
 	"time"

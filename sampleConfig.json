@@ -1,10 +1,11 @@
 {
-    "logPath" : "/var/log/pushd.log",
-    "postgres" : "",
-    "socket" : "/run/pushd"
-    "connectors" : {
-        "gcm" : {
-            "confInfo" : "whatever"
-        }
+    "Postgres" : "user=pushed dbname=pushed host=/run/postgresql sslmode=disable",
+    "Listen"   : {
+        "Socket" : "/run/pushed"
+    }
+    "Gcm" : {
+        "ApiKey" : "your api key"
+        "MaxTcpConns" : 9
+        "MaxRetryTime" : 12
     }
 }
