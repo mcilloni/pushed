@@ -60,7 +60,7 @@ func (resp *response) Dump(w io.Writer) (e error) {
 
 }
 
-func ParseRequest(head, data []byte) (op *operation, resp *response) {
+func parseRequest(head, data []byte) (op *operation, resp *response) {
 
 	fields := bytes.Fields(head)
 
@@ -138,7 +138,7 @@ func ParseRequest(head, data []byte) (op *operation, resp *response) {
 
 		conn := backend.GetConnector(string(param2[0]))
 
-		if conn != nil {
+		if conn == nil {
 			return failure("Connector %s does not exist", param2[0])
 		}
 

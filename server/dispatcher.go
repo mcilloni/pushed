@@ -20,7 +20,7 @@ var (
 	routines      uint64 = 0
 )
 
-func dispatch(incoming chan net.Conn, forward chan<- command) {
+func dispatch(incoming chan net.Conn, forward chan<- command, finished chan<- bool) {
 
 	routineN := atomic.AddUint64(&routines, 1)
 
@@ -39,6 +39,7 @@ func dispatch(incoming chan net.Conn, forward chan<- command) {
 	}
 
 	for in := range incoming {
+
 		read = bufio.NewReader(in)
 
 		request, e = read.ReadBytes('\n')
@@ -56,7 +57,7 @@ func dispatch(incoming chan net.Conn, forward chan<- command) {
 			continue
 		}
 
-		op, resp := ParseRequest(request, data)
+		op, resp := parseRequest(request, data)
 
 		e = resp.Dump(in)
 
@@ -75,11 +76,17 @@ func dispatch(incoming chan net.Conn, forward chan<- command) {
 			}
 		}
 
-		incoming <- in //send connection back for further operations
+        if op.Command != halt {
+            incoming <- in //send connection back for further operations
+        } else {
+            in.Close()
+        }
 
 	}
 
 	log.Printf("Dispatcher routine %d exited", routineN)
+
+    finished <- true
 }
 
 func execOp(op *operation, forward chan<- command) (e error) {
