@@ -16,13 +16,12 @@ const (
 )
 
 var (
-	GcmAuthError            = errors.New("GCM: The given GCM authkey is invalid. Check it twice.")
-	GcmInternalServerError  = errors.New("GCM: Internal server error.")
-	GcmMessageTooLargeError = errors.New("GCM: Message is bigger than 4 KiBs (4096 bytes)")
-	GcmNoRegIdForUser       = errors.New("GCM: No Registration IDs for given user")
-	GcmTimeoutError         = errors.New("GCM: Timeout or server unavailable.")
-	GcmUnknownStatusError   = errors.New("GCM: Unknown status. Fatal.")
-	GcmWontTryAgain         = errors.New("GCM: Connector has given up with message delivery")
+	GcmAuthError            = errors.New("The given GCM authkey is invalid. Check it twice.")
+	GcmInternalServerError  = errors.New("Internal server error.")
+	GcmMessageTooLargeError = errors.New("Message is bigger than 4 KiBs (4096 bytes)")
+	GcmTimeoutError         = errors.New("Timeout or server unavailable.")
+	GcmUnknownStatusError   = errors.New("Unknown status. Fatal.")
+	GcmWontTryAgain         = errors.New("Connector has given up with message delivery")
 )
 
 type GcmConfig struct {
@@ -46,6 +45,12 @@ func (db *db) gcmInitStmt() (e error) {
 
 	c := db.conn
 
+	db.gcmIdSubscribed, e = c.Prepare("SELECT COUNT(1) FROM GCM WHERE USERID = $1")
+
+	if e != nil {
+		return
+	}
+
 	db.gcmRegAdd, e = c.Prepare("INSERT INTO GCM VALUES ($1,$2)")
 
 	if e != nil {
@@ -53,6 +58,12 @@ func (db *db) gcmInitStmt() (e error) {
 	}
 
 	db.gcmRegDel, e = c.Prepare("DELETE FROM GCM WHERE REGID = $1")
+
+	if e != nil {
+		return
+	}
+
+	db.gcmRegExists, e = c.Prepare("SELECT COUNT(1) FROM GCM WHERE (USERID,REGID) = ($1,$2)")
 
 	if e != nil {
 		return
@@ -80,6 +91,10 @@ func (db *db) gcmAddRegistrationId(id int64, regid string) error {
 
 func (db *db) gcmCloseStmt() (e error) {
 
+	if e = db.gcmIdSubscribed.Close(); e != nil {
+		return
+	}
+
 	if e = db.gcmRegAdd.Close(); e != nil {
 		return
 	}
@@ -88,21 +103,36 @@ func (db *db) gcmCloseStmt() (e error) {
 		return
 	}
 
+	if e = db.gcmRegExists.Close(); e != nil {
+		return
+	}
+
 	if e = db.gcmRegFetch.Close(); e != nil {
 		return
 	}
 
-	return nil
+	return db.gcmUpdateReg.Close()
 
 }
 
 func (db *db) gcmDeleteRegistrationId(regid string) error {
 
-    log.Println("Deleting a RegId")
+	log.Println("Deleting a RegId")
 
 	_, e := db.gcmRegDel.Exec(regid)
 
 	return e
+}
+
+func (db *db) gcmExistsRegistrationId(id int64, regid string) (b bool, e error) {
+	e = db.gcmRegExists.QueryRow(id, regid).Scan(&b)
+	return
+}
+
+func (db *db) gcmExistsUserId(id int64) (b bool, e error) {
+	e = db.gcmIdSubscribed.QueryRow(id).Scan(&b)
+
+	return
 }
 
 func (db *db) gcmGetRegistrationIdsForId(id int64) ([]string, error) {
@@ -130,7 +160,7 @@ func (db *db) gcmGetRegistrationIdsForId(id int64) ([]string, error) {
 	}
 
 	if len(ids) == 0 {
-		return nil, GcmNoRegIdForUser
+		return nil, ErrNotRegistered
 	}
 
 	return ids, nil
@@ -208,6 +238,12 @@ type gcmOpData struct {
 	Response *http.Response
 }
 
+func (gcm *gcm) Exists(user int64, deviceTargetId string) (bool, error) {
+
+	return globalDb.gcmExistsRegistrationId(user, deviceTargetId)
+
+}
+
 func (gcm *gcm) Push(user int64, message Message) error {
 
 	ids, e := globalDb.gcmGetRegistrationIdsForId(user)
@@ -224,6 +260,10 @@ func (gcm *gcm) Register(user int64, deviceTargetId string) error {
 
 	return globalDb.gcmAddRegistrationId(user, deviceTargetId)
 
+}
+
+func (gcm *gcm) Subscribed(user int64) (bool, error) {
+	return globalDb.gcmExistsUserId(user)
 }
 
 func (gcm *gcm) Unregister(deviceTargetId string) error {
@@ -318,6 +358,7 @@ func (gcm *gcm) payloadPush(payload *gcmPayload, retryTime time.Duration) error 
 	}
 
 	req.Header.Add("Authorization", gcm.apiKey)
+	req.Header.Add("Content-Type", "application/json")
 
 	res, e := gcm.client.Do(req)
 

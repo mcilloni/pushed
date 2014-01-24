@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"github.com/mcilloni/pushed/backend"
 	"io"
@@ -57,7 +58,7 @@ func dispatch(incoming chan net.Conn, forward chan<- command, finished chan<- bo
 
 		op, resp := parseRequest(request, data)
 
-		e = resp.Dump(in)
+		e = resp.dump(in)
 
 		if e != nil {
 			logerr(e)
@@ -69,20 +70,18 @@ func dispatch(incoming chan net.Conn, forward chan<- command, finished chan<- bo
 
 			if e = execOp(op, forward); e != nil {
 				logerr(e)
-				in.Close()
-				continue
 			}
 		}
 
-        if op.Command != halt {
-            incoming <- in //send connection back for further operations
-        } else {
-            in.Close()
-        }
+		if resp.Status == rejected || op.Command != halt {
+			incoming <- in //send connection back for further operations
+		} else {
+			in.Close()
+		}
 
 	}
 
-    finished <- true
+	finished <- true
 }
 
 func execOp(op *operation, forward chan<- command) (e error) {
@@ -112,8 +111,23 @@ func execOp(op *operation, forward chan<- command) (e error) {
 		break
 
 	case push:
-		conn := op.Parameters[1].(backend.Connector)
-		e = conn.Push(op.Parameters[0].(int64), op.Parameters[0].(backend.Message))
+		failed, failures := backend.PushAll(op.Parameters[0].(int64), op.Parameters[1].(backend.Message))
+
+		if failed {
+			buffer := bytes.NewBufferString("Errors from connectors - ")
+			for key, value := range failures {
+				buffer.WriteString(key)
+				buffer.WriteString(": '")
+				buffer.WriteString(value.Error())
+				buffer.WriteString("' ")
+			}
+
+			e = errors.New(buffer.String())
+
+		} else {
+			e = nil
+		}
+
 		break
 
 	}

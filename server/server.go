@@ -41,7 +41,7 @@ func serveConfig(config *config, stop <-chan bool) (e error) {
 		forward  = make(chan command, 10)
 		incoming = make(chan net.Conn, 10)
 		srv      net.Listener
-        wait     = make(chan bool)
+		wait     = make(chan bool)
 	)
 
 	if e = backend.InitGcm(config.Gcm); e != nil {
@@ -72,7 +72,7 @@ func serveConfig(config *config, stop <-chan bool) (e error) {
 
 	go func() {
 
-        log.Println("Server is initialized, accepting connections")
+		log.Println("Server is initialized, accepting connections")
 
 		for {
 			conn, e := srv.Accept()
@@ -109,9 +109,9 @@ func serveConfig(config *config, stop <-chan bool) (e error) {
 	close(forward)
 	log.Println("Server is halting")
 
-    for i := uint8(0); i < config.Dispatchers; i++ {
-        <-wait //wait for routines to finish
-    }
+	for i := uint8(0); i < config.Dispatchers; i++ {
+		<-wait //wait for routines to finish
+	}
 
 	return
 }

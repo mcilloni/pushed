@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"strings"
 	"sync"
 )
@@ -10,14 +11,17 @@ const (
 )
 
 var (
-	Gcm         Connector
-	connectors  map[string]Connector
-	gcmInitOnce sync.Once
+	ErrNotRegistered = errors.New("Not registered to this connector")
+	Gcm              Connector
+	connectors       map[string]Connector
+	gcmInitOnce      sync.Once
 )
 
 type Connector interface {
+	Exists(user int64, deviceTargetId string) (bool, error)
 	Push(user int64, message Message) error
 	Register(user int64, deviceTargetId string) error
+	Subscribed(user int64) (bool, error)
 	Unregister(deviceTargetId string) error
 }
 
@@ -56,8 +60,10 @@ func PushAll(user int64, message Message) (failures bool, errors map[string]erro
 	}
 
 	for name, _ := range connectors {
-		errors[name] = <-errChan
-		if errors[name] != nil {
+		e := <-errChan
+
+		if e != nil && e != ErrNotRegistered {
+			errors[name] = e
 			failures = true
 		}
 	}

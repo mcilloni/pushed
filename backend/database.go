@@ -22,9 +22,13 @@ func DelUser(id int64) error {
 	return globalDb.userDel(id)
 }
 
+func Exists(id int64) (bool, error) {
+	return globalDb.userExists(id)
+}
+
 type db struct {
-	conn                                                                      *sql.DB
-	userAddStmt, userDelStmt, gcmRegAdd, gcmRegDel, gcmRegFetch, gcmUpdateReg *sql.Stmt
+	conn                                                                                                                     *sql.DB
+	userAddStmt, userDelStmt, userExistsStmt, gcmIdSubscribed, gcmRegAdd, gcmRegDel, gcmRegExists, gcmRegFetch, gcmUpdateReg *sql.Stmt
 }
 
 func ConnectDb(connstr string) (e error) {
@@ -70,6 +74,12 @@ func dialDb(connstr string) (*db, error) {
 		return nil, e
 	}
 
+	dbInst.userExistsStmt, e = conn.Prepare("SELECT COUNT(1) FROM USERS WHERE ID = $1")
+
+	if e != nil {
+		return nil, e
+	}
+
 	return dbInst, nil
 }
 
@@ -84,6 +94,10 @@ func (db *db) close() (e error) {
 	}
 
 	if e = db.userDelStmt.Close(); e != nil {
+		return
+	}
+
+	if e = db.userExistsStmt.Close(); e != nil {
 		return
 	}
 
@@ -138,6 +152,13 @@ func (db *db) userDel(id int64) error {
 
 	return e
 
+}
+
+func (db *db) userExists(id int64) (b bool, e error) {
+
+	e = db.userExistsStmt.QueryRow(id).Scan(&b)
+
+	return
 }
 
 func InitDb(connstr string) error {
