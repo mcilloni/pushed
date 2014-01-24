@@ -72,11 +72,13 @@ func serveConfig(config *config, stop <-chan bool) (e error) {
 
 	go func() {
 
+        log.Println("Server is initialized, accepting connections")
+
 		for {
 			conn, e := srv.Accept()
 
 			if e != nil {
-				log.Println("Will stop accepting connections")
+				log.Println("Terminating operations")
 				failure <- true //if the error is real (and not caused by Close) this will close the server.
 				break
 			}

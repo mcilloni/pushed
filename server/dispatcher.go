@@ -24,8 +24,6 @@ func dispatch(incoming chan net.Conn, forward chan<- command, finished chan<- bo
 
 	routineN := atomic.AddUint64(&routines, 1)
 
-	log.Printf("Dispatcher routine %d started", routineN)
-
 	var (
 		request, data []byte
 		e             error
@@ -83,8 +81,6 @@ func dispatch(incoming chan net.Conn, forward chan<- command, finished chan<- bo
         }
 
 	}
-
-	log.Printf("Dispatcher routine %d exited", routineN)
 
     finished <- true
 }

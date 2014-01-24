@@ -71,7 +71,7 @@ func (db *db) gcmInitStmt() (e error) {
 }
 
 func (db *db) gcmAddRegistrationId(id int64, regid string) error {
-	log.Printf("adding GCM RegId for %d", id)
+	log.Printf("Adding GCM RegId for %d", id)
 
 	_, e := db.gcmRegAdd.Exec(id, regid)
 
@@ -97,6 +97,8 @@ func (db *db) gcmCloseStmt() (e error) {
 }
 
 func (db *db) gcmDeleteRegistrationId(regid string) error {
+
+    log.Println("Deleting a RegId")
 
 	_, e := db.gcmRegDel.Exec(regid)
 
