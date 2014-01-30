@@ -1,7 +1,7 @@
 {
     "Postgres" : "user=pushed dbname=pushed host=/run/postgresql sslmode=disable",
     "Listen"   : {
-        "TcpInfo" : "localhost:5667"    
+        "TcpInfo" : "[::1]:5667"    
     },
     "Gcm" : {
         "ApiKey" : "your api key",

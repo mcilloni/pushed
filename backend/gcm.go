@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+    "io/ioutil"
 )
 
 const (
@@ -301,7 +303,14 @@ func (gcm *gcm) evalResponse(opData *gcmOpData) error {
 		break //all good, all right, but who knows what we could expect from body?
 
 	case res.StatusCode == 400:
-		log.Panic("Google rejected our JSON - this is a critical bug in GCM connector. Fix the bug and retry")
+
+        body,e := ioutil.ReadAll(opData.Response.Body)
+
+        if e != nil {
+            return e
+        }
+
+        return errors.New("Server reported error while parsing JSON: " + string(body))
 
 	case res.StatusCode == 401:
 		return GcmAuthError
