@@ -1,3 +1,20 @@
+/*  Pushed - a daemon for parallel handling of push operations to mobile devices
+ *  Copyright (C) 2014  Marco Cilloni <marco.cilloni@yahoo.com>
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Affero General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package backend
 
 import (
@@ -8,7 +25,7 @@ import (
 	"net/http"
 	"time"
 
-    "io/ioutil"
+	"io/ioutil"
 )
 
 const (
@@ -304,13 +321,13 @@ func (gcm *gcm) evalResponse(opData *gcmOpData) error {
 
 	case res.StatusCode == 400:
 
-        body,e := ioutil.ReadAll(opData.Response.Body)
+		body, e := ioutil.ReadAll(opData.Response.Body)
 
-        if e != nil {
-            return e
-        }
+		if e != nil {
+			return e
+		}
 
-        return errors.New("Server reported error while parsing JSON: " + string(body))
+		return errors.New("Server reported error while parsing JSON: " + string(body))
 
 	case res.StatusCode == 401:
 		return GcmAuthError
