@@ -55,7 +55,7 @@ func main() {
 	}
 
 	if logPath != "" {
-		logFile, e := os.OpenFile(logPath, os.O_WRONLY|os.O_APPEND, 0666)
+		logFile, e := os.OpenFile(logPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 
 		if e != nil {
 			fmt.Printf("Cannot open %s: %s\n", logPath, e.Error())
