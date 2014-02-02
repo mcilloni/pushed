@@ -24,6 +24,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/debug"
 )
 
 var (
@@ -47,6 +48,14 @@ func printHelp() {
 }
 
 func main() {
+
+	//If panic during execution, recover, log and exit
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println(string(debug.Stack()))
+		}
+	}()
+
 	flag.Parse()
 
 	if help {
