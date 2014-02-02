@@ -6,8 +6,13 @@
 
 set +e
 
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 postgres_user"
+    exit -1
+fi
+
 echo "Adding pushed PostgreSQL user"
-createuser pushed
+createuser -U $1 pushed
 
 echo "Adding pushed PostgreSQL database"
-createdb -O pushed pushed "Pushed database"
+createdb -U $1 -O pushed pushed "Pushed database"
