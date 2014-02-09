@@ -35,6 +35,7 @@ const (
 )
 
 var (
+	GcmAlreadyExistent      = errors.New("The given Registration ID is already present in the database")
 	GcmAuthError            = errors.New("The given GCM authkey is invalid. Check it twice.")
 	GcmInternalServerError  = errors.New("Internal server error.")
 	GcmMessageTooLargeError = errors.New("Message is bigger than 4 KiBs (4096 bytes)")
@@ -82,7 +83,7 @@ func (db *db) gcmInitStmt() (e error) {
 		return
 	}
 
-	db.gcmRegExists, e = c.Prepare("SELECT COUNT(1) FROM GCM WHERE (USERID,REGID) = ($1,$2)")
+	db.gcmRegExists, e = c.Prepare("SELECT COUNT(1) FROM GCM WHERE REGID = $1")
 
 	if e != nil {
 		return
@@ -103,7 +104,17 @@ func (db *db) gcmInitStmt() (e error) {
 func (db *db) gcmAddRegistrationId(id int64, regid string) error {
 	log.Printf("Adding GCM RegId for %d", id)
 
-	_, e := db.gcmRegAdd.Exec(id, regid)
+	idExists, e := db.gcmExistsRegistrationId(regid) 
+	
+	if e != nil {
+		return e
+	}
+
+	if idExists {
+		return GcmAlreadyExistent
+	}
+
+	_, e = db.gcmRegAdd.Exec(id, regid)
 
 	return e
 }
@@ -143,8 +154,8 @@ func (db *db) gcmDeleteRegistrationId(regid string) error {
 	return e
 }
 
-func (db *db) gcmExistsRegistrationId(id int64, regid string) (b bool, e error) {
-	e = db.gcmRegExists.QueryRow(id, regid).Scan(&b)
+func (db *db) gcmExistsRegistrationId(regid string) (b bool, e error) {
+	e = db.gcmRegExists.QueryRow(regid).Scan(&b)
 	return
 }
 
@@ -188,7 +199,7 @@ func (db *db) gcmGetRegistrationIdsForId(id int64) ([]string, error) {
 
 func (db *db) gcmInitTable() error {
 
-	_, e := db.conn.Exec("CREATE TABLE GCM (USERID BIGINT REFERENCES USERS ON DELETE CASCADE, REGID CHARACTER VARYING, PRIMARY KEY (USERID,REGID))")
+	_, e := db.conn.Exec("CREATE TABLE GCM (USERID BIGINT REFERENCES USERS ON DELETE CASCADE, REGID CHARACTER VARYING, PRIMARY KEY (USERID,REGID)")
 
 	if e != nil {
 		return e
@@ -257,9 +268,9 @@ type gcmOpData struct {
 	Response *http.Response
 }
 
-func (gcm *gcm) Exists(user int64, deviceTargetId string) (bool, error) {
+func (gcm *gcm) Exists(deviceTargetId string) (bool, error) {
 
-	return globalDb.gcmExistsRegistrationId(user, deviceTargetId)
+	return globalDb.gcmExistsRegistrationId(deviceTargetId)
 
 }
 
@@ -465,6 +476,18 @@ func (gcm *gcm) responseEvalLine(regid string, result *gcmResult, opData *gcmOpD
 
 	if result.MessageId != "" { //all went well, check if a canonical id is given... (http://developer.android.com/google/gcm/adv.html#canonical)
 		if result.CanonId != "" {
+
+			//user has reregistered the application before leaving us able to remove the old id. So, just drop this one
+			exists, e := globalDb.gcmExistsRegistrationId(result.CanonId) 
+			
+			if e != nil {
+				return e
+			}
+			
+			if exists {
+				return globalDb.gcmDeleteRegistrationId(regid)
+		    }
+
 			return globalDb.gcmUpdateRegId(regid, result.CanonId) //update, than we're good
 		}
 		return nil //all good, nothing to do

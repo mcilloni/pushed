@@ -35,7 +35,7 @@ var (
 )
 
 type Connector interface {
-	Exists(user int64, deviceTargetId string) (bool, error)
+	Exists(deviceTargetId string) (bool, error)
 	Push(user int64, message Message) error
 	Register(user int64, deviceTargetId string) error
 	Subscribed(user int64) (bool, error)

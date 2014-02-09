@@ -142,10 +142,32 @@ func parseRequest(head, data []byte) (op *operation, resp *response) {
 		val, e := strconv.ParseInt(string(fields[1]), 10, 64)
 
 		if e != nil {
-			return failure("Cannot parse %s as an integer", fields[1])
-		}
 
-		op.Parameters = []interface{}{val}
+			if op.Command == exists {
+
+				param2 := bytes.SplitN(fields[1], []byte(":"), 2)
+
+				lenParam2 := len(param2)
+
+				if lenParam2 != 2 {
+					return failure("Malformed request string")
+				}
+
+				conn := backend.GetConnector(string(param2[0]))
+
+				if conn == nil {
+					return failure("Connector %s does not exist", param2[0])
+				}
+
+				op.Parameters = []interface{}{conn, string(param2[1])}
+
+			} else {
+				return failure("Cannot parse %s as an integer", fields[1])
+		    }
+
+		} else {
+			op.Parameters = []interface{}{val}
+	    }
 
 		if op.Command == exists {
 			resp, e = synchronousRequest(op)
@@ -161,9 +183,38 @@ func parseRequest(head, data []byte) (op *operation, resp *response) {
 
 		break
 
-	case subscribe, subscribed, unsubscribe:
+    case subscribed:
+		
+		op.Parameters = make([]interface{}, 2)
 
-		reqCheck := op.Command == subscribed
+		if fieldsLen != 3 {
+			return failure("Wrong number of arguments for SUBSCRIBED: %d", fieldsLen)
+	    }
+
+		val, e := strconv.ParseInt(string(fields[1]), 10, 64)
+
+		if e != nil {
+			return failure("Cannot parse %s as a signed integer", fields[1])
+		}
+
+		conn := backend.GetConnector(string(fields[2]))
+
+		if conn == nil {
+			return failure("Connector %s does not exist", string(fields[2]))
+		}
+
+		op.Parameters[0], op.Parameters[1] = val, conn
+
+		resp, e = synchronousRequest(op)
+
+		if e != nil {
+			log.Printf("Error: %s", e.Error())
+			return failure("Internal error")
+		}
+
+		break
+
+	case subscribe, unsubscribe:
 
 		op.Parameters = make([]interface{}, 3)
 
@@ -183,7 +234,7 @@ func parseRequest(head, data []byte) (op *operation, resp *response) {
 
 		lenParam2 := len(param2)
 
-		if lenParam2 != 2 && !(reqCheck && lenParam2 == 1) {
+		if lenParam2 != 2 {
 			return failure("Malformed request string")
 		}
 
@@ -193,24 +244,7 @@ func parseRequest(head, data []byte) (op *operation, resp *response) {
 			return failure("Connector %s does not exist", param2[0])
 		}
 
-		devId := ""
-
-		if lenParam2 == 2 {
-			devId = string(param2[1])
-		}
-
-		op.Parameters[1], op.Parameters[2] = conn, devId
-
-		if reqCheck {
-			resp, e = synchronousRequest(op)
-
-			if e != nil {
-				log.Printf("Error: %s", e.Error())
-				return failure("Internal error")
-			}
-
-			return
-		}
+		op.Parameters[1], op.Parameters[2] = conn, string(param2[1])
 
 		break
 
@@ -252,7 +286,16 @@ func synchronousRequest(op *operation) (resp *response, e error) {
 
 	switch op.Command {
 	case exists:
-		b, e = backend.Exists(op.Parameters[0].(int64))
+
+		if len(op.Parameters) == 2 {
+			conn := op.Parameters[0].(backend.Connector)
+
+			devId := op.Parameters[1].(string)
+
+			b, e = conn.Exists(devId)
+		} else {
+			b, e = backend.Exists(op.Parameters[0].(int64))
+		}
 
 		break
 
@@ -261,13 +304,8 @@ func synchronousRequest(op *operation) (resp *response, e error) {
 		conn := op.Parameters[1].(backend.Connector)
 
 		id := op.Parameters[0].(int64)
-		devId := op.Parameters[2].(string)
 
-		if len(devId) > 0 {
-			b, e = conn.Exists(id, devId)
-		} else {
-			b, e = conn.Subscribed(id)
-		}
+		b, e = conn.Subscribed(id)
 
 		break
 
