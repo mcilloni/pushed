@@ -49,10 +49,16 @@ func printHelp() {
 
 func main() {
 
+	var logFile *os.File
+
 	//If panic during execution, recover, log and exit
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println(string(debug.Stack()))
+		}
+
+		if logFile != nil {
+			logFile.Close()
 		}
 	}()
 
@@ -70,8 +76,6 @@ func main() {
 			fmt.Printf("Cannot open %s: %s\n", logPath, e.Error())
 			return
 		}
-
-		defer logFile.Close()
 
 		log.SetOutput(logFile)
 	}
