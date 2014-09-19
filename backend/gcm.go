@@ -199,7 +199,7 @@ func (db *db) gcmGetRegistrationIdsForId(id int64) ([]string, error) {
 
 func (db *db) gcmInitTable() error {
 
-	_, e := db.conn.Exec("CREATE TABLE GCM (USERID BIGINT REFERENCES USERS ON DELETE CASCADE, REGID CHARACTER VARYING, PRIMARY KEY (USERID,REGID)")
+	_, e := db.conn.Exec("CREATE TABLE GCM (USERID BIGINT REFERENCES USERS ON DELETE CASCADE, REGID CHARACTER VARYING, PRIMARY KEY (USERID,REGID))")
 
 	if e != nil {
 		return e
@@ -478,12 +478,12 @@ func (gcm *gcm) responseEvalLine(regid string, result *gcmResult, opData *gcmOpD
 		if result.CanonId != "" {
 
 			//user has reregistered the application before leaving us able to remove the old id. So, just drop this one
-			exists, e := globalDb.gcmExistsRegistrationId(result.CanonId) 
-			
+			exists, e := globalDb.gcmExistsRegistrationId(result.CanonId)
+
 			if e != nil {
 				return e
 			}
-			
+
 			if exists {
 				return globalDb.gcmDeleteRegistrationId(regid)
 		    }
