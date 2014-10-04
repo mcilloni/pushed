@@ -9,7 +9,7 @@ ExecStart=/path/of/go/bin/pushed -logfile=/path/of/pushed/log /path/of/pushed/co
 ExecStop=/bin/kill -s QUIT $(ps aux | grep pushed |grep --invert-match grep |grep --invert-match postgres | awk '{print $2}')
 # Errors occurs when postgresql is shutted down
 Restart=on-failure
-RestartSec="2min"
+RestartSec=120
  
 [Install]
 WantedBy=multi-user.target
