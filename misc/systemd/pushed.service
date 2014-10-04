@@ -1,0 +1,15 @@
+[Unit]
+Description=pushed - A push daemon written in Go.
+Documentation=https://github.com/mcilloni/pushed
+After=postgresql-9.3.service
+ 
+[Service]
+Type=simple
+ExecStart=/path/of/go/bin/pushed -logfile=/path/of/pushed/log /path/of/pushed/config.json
+ExecStop=/bin/kill -s QUIT $(ps aux | grep pushed |grep --invert-match grep |grep --invert-match postgres | awk '{print $2}')
+# Errors occurs when postgresql is shutted down
+Restart=on-failure
+RestartSec=120
+ 
+[Install]
+WantedBy=multi-user.target
