@@ -2,6 +2,7 @@ pushed
 =====
 
 A push daemon written in Go.
+Released under the MPLv2.
 
 Requirements
 -------------
